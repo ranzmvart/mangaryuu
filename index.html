@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0f1a" />
+    <meta
+      name="description"
+      content="Ryuu Manga Reader - web reader berbasis MangaDex API, siap deploy ke Netlify."
+    />
+    <title>Ryuu Manga Reader</title>
+    <link rel="preconnect" href="https://api.mangadex.org" />
+    <link rel="preconnect" href="https://uploads.mangadex.org" />
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">R</div>
+          <div>
+            <h1>Ryuu Reader</h1>
+            <p>MangaDex Web Reader</p>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Navigasi utama">
+          <button class="nav-item is-active" data-route="#/home">🏠 Beranda</button>
+          <button class="nav-item" data-route="#/search">🔎 Cari</button>
+          <button class="nav-item" data-route="#/library">⭐ Library</button>
+          <button class="nav-item" data-route="#/history">🕘 Riwayat</button>
+          <button class="nav-item" data-route="#/about">⚠️ Catatan</button>
+        </nav>
+
+        <div class="sidebar-card">
+          <span class="pill">Gratis • Tanpa Database</span>
+          <p>Semua bookmark dan riwayat tersimpan di browser kamu memakai localStorage.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <button class="icon-btn mobile-only" id="menuBtn" aria-label="Buka menu">☰</button>
+
+          <form class="global-search" id="globalSearchForm">
+            <input
+              id="globalSearchInput"
+              type="search"
+              placeholder="Cari manga/manhwa... contoh: One Piece"
+              autocomplete="off"
+            />
+            <button type="submit">Cari</button>
+          </form>
+
+          <div class="top-actions">
+            <select id="languageSelect" title="Bahasa chapter default">
+              <option value="id,en">ID + EN</option>
+              <option value="id">Indonesia</option>
+              <option value="en">English</option>
+              <option value="all">Semua</option>
+            </select>
+            <button class="icon-btn" id="themeToggle" title="Ganti tema">🌙</button>
+          </div>
+        </header>
+
+        <section id="appView" class="view" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <template id="mangaCardTemplate">
+      <article class="manga-card">
+        <div class="cover-wrap">
+          <img class="cover" alt="" loading="lazy" />
+          <span class="badge type-badge"></span>
+        </div>
+        <div class="card-body">
+          <h3></h3>
+          <p class="meta"></p>
+          <p class="desc"></p>
+        </div>
+      </article>
+    </template>
+
+    <script src="assets/js/app.js" defer></script>
+  </body>
+</html>
