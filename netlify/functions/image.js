@@ -1,11 +1,10 @@
-const allowedHosts = new Set([
-  "uploads.mangadex.org",
-]);
-
 function isAllowedUrl(value) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && allowedHosts.has(url.hostname);
+    return url.protocol === "https:" && (
+      url.hostname === "uploads.mangadex.org" ||
+      url.hostname.endsWith(".mangadex.org")
+    );
   } catch {
     return false;
   }
@@ -43,7 +42,11 @@ exports.handler = async function handler(event) {
 
   try {
     const response = await fetch(imageUrl, {
-      headers: { "User-Agent": "Ryuu Manga Reader Image Proxy/1.0" },
+      headers: {
+        "User-Agent": "Ryuu Manga Reader Image Proxy/2.0",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": "https://mangadex.org/",
+      },
     });
 
     if (!response.ok) {

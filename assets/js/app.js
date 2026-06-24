@@ -4,10 +4,20 @@
   const IS_LOCAL = ["localhost", "127.0.0.1", ""].includes(location.hostname) || location.protocol === "file:";
   const API = IS_LOCAL ? "https://api.mangadex.org" : "/api/mangadex";
   const RAW_COVER_BASE = "https://uploads.mangadex.org/covers";
+  const DEFAULT_LANG = "en";
+  const APP_VERSION = "2.0-stable-reader";
 
   function proxiedImage(url) {
     if (!url || url.startsWith("data:")) return url;
-    return IS_LOCAL ? url : `/api/image?url=${encodeURIComponent(url)}`;
+    // Langsung ke Netlify Function agar tidak bergantung pada redirect /api/image.
+    return IS_LOCAL ? url : `/.netlify/functions/image?url=${encodeURIComponent(url)}`;
+  }
+
+  function imageTag(url, alt = "Gambar", loading = "lazy", className = "") {
+    const safeUrl = url || PLACEHOLDER;
+    const fallback = proxiedImage(safeUrl);
+    const cls = className ? ` class="${escapeHTML(className)}"` : "";
+    return `<img${cls} src="${escapeHTML(safeUrl)}" data-fallback-src="${escapeHTML(fallback)}" alt="${escapeHTML(alt)}" loading="${loading}" decoding="async" />`;
   }
   const PLACEHOLDER = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
     <svg xmlns="http://www.w3.org/2000/svg" width="400" height="600" viewBox="0 0 400 600">
@@ -86,7 +96,7 @@
     const cover = relationshipOf(manga, "cover_art");
     const file = cover?.attributes?.fileName;
     if (!file) return PLACEHOLDER;
-    return proxiedImage(`${RAW_COVER_BASE}/${manga.id}/${file}.${size}.jpg`);
+    return `${RAW_COVER_BASE}/${manga.id}/${file}.${size}.jpg`;
   }
 
   function mangaFromChapter(chapter) {
@@ -104,6 +114,12 @@
     const langs = getLangs();
     if (!langs.length) return "";
     return langs.map((lang) => `translatedLanguage[]=${encodeURIComponent(lang)}`).join("&");
+  }
+
+  function availableLanguageParams() {
+    const langs = getLangs();
+    if (!langs.length) return "";
+    return langs.map((lang) => `availableTranslatedLanguage[]=${encodeURIComponent(lang)}`).join("&");
   }
 
   function contentRatingParams() {
@@ -173,8 +189,11 @@
     const node = els.cardTemplate.content.firstElementChild.cloneNode(true);
     const title = titleOf(manga);
     const type = manga.attributes?.publicationDemographic || manga.attributes?.contentRating || "manga";
-    node.querySelector("img").src = coverOf(manga, "256");
-    node.querySelector("img").alt = title;
+    const coverUrl = coverOf(manga, "256");
+    const cardImg = node.querySelector("img");
+    cardImg.src = coverUrl;
+    cardImg.dataset.fallbackSrc = proxiedImage(coverUrl);
+    cardImg.alt = title;
     node.querySelector("h3").textContent = title;
     node.querySelector(".meta").textContent = [manga.attributes?.status, manga.attributes?.year].filter(Boolean).join(" • ") || "MangaDex";
     node.querySelector(".desc").textContent = descriptionOf(manga);
@@ -203,9 +222,10 @@
     setLoading("Menyiapkan halaman beranda...");
 
     try {
+      const availableLang = availableLanguageParams();
       const [popular, latest] = await Promise.all([
-        api("/manga", `limit=18&includes[]=cover_art&order[followedCount]=desc&${contentRatingParams()}&hasAvailableChapters=true`),
-        api("/manga", `limit=18&includes[]=cover_art&order[latestUploadedChapter]=desc&${contentRatingParams()}&hasAvailableChapters=true`),
+        api("/manga", `limit=18&includes[]=cover_art&order[followedCount]=desc&${contentRatingParams()}&hasAvailableChapters=true${availableLang ? "&" + availableLang : ""}`),
+        api("/manga", `limit=18&includes[]=cover_art&order[latestUploadedChapter]=desc&${contentRatingParams()}&hasAvailableChapters=true${availableLang ? "&" + availableLang : ""}`),
       ]);
 
       const favorites = store.get("ryuu_favorites", []);
@@ -214,12 +234,12 @@
       els.view.innerHTML = `
         <section class="hero">
           <div class="hero-card">
-            <span class="pill">Ready Deploy • Netlify Static</span>
+            <span class="pill">Siap Deploy • Netlify Static</span>
             <h2>Baca manga/manhwa langsung di website kamu.</h2>
-            <p>Search, detail manga, daftar chapter, reader scroll, mode halaman, bookmark, dan riwayat baca. Versi ini memakai Netlify Functions proxy supaya request API lebih stabil saat sudah deploy.</p>
+            <p>Pencarian, detail manga, daftar chapter, mode scroll, mode halaman, bookmark, dan riwayat baca. Versi ini memakai proxy Netlify Functions supaya akses API lebih stabil setelah deploy.</p>
             <div class="hero-actions">
               <button class="primary-btn" data-action="focus-search">Mulai Cari</button>
-              <button class="secondary-btn" data-route="#/library">Buka Library</button>
+              <button class="secondary-btn" data-route="#/library">Buka Koleksi</button>
               <button class="ghost-btn" data-route="#/about">Baca Catatan Legal</button>
             </div>
           </div>
@@ -285,7 +305,7 @@
     setActiveNav("#/search");
     els.view.innerHTML = `
       <div class="page-title">
-        <span class="pill">Search</span>
+        <span class="pill">Pencarian</span>
         <h2>Cari Manga / Manhwa</h2>
         <p>Masukkan judul lalu pilih hasil untuk membuka detail dan chapter. Filter bahasa chapter ada di kanan atas.</p>
       </div>
@@ -338,6 +358,8 @@
         "order[relevance]=desc",
         contentRatingParams(),
       ];
+      const availableLang = availableLanguageParams();
+      if (availableLang) params.push(availableLang);
       if (type) params.push(`originalLanguage[]=${type === "manhwa" ? "ko" : type === "manhua" ? "zh" : "ja"}`);
       if (status) params.push(`status[]=${encodeURIComponent(status)}`);
 
@@ -369,7 +391,7 @@
       els.view.innerHTML = `
         <section class="detail-grid">
           <div class="detail-cover">
-            <img src="${coverOf(manga, "512")}" alt="${escapeHTML(title)}" />
+            ${imageTag(coverOf(manga, "512"), title, "lazy")}
           </div>
           <div class="panel detail-info">
             <span class="pill">${escapeHTML(manga.attributes?.status || "MangaDex")}</span>
@@ -408,6 +430,25 @@
     }
   }
 
+  async function fetchChapterFeed(mangaId, baseParams) {
+    const collected = [];
+    let offset = 0;
+    let total = Infinity;
+    const maxToLoad = 500;
+
+    while (offset < total && offset < maxToLoad) {
+      const params = [...baseParams, "limit=100", `offset=${offset}`].join("&");
+      const result = await api(`/manga/${mangaId}/feed`, params);
+      const batch = result.data || [];
+      collected.push(...batch);
+      total = Number(result.total || collected.length);
+      if (!batch.length) break;
+      offset += batch.length;
+    }
+
+    return collected;
+  }
+
   async function loadChapters(mangaId) {
     const list = document.getElementById("chapterList");
     const order = document.getElementById("chapterOrder")?.value || "desc";
@@ -415,7 +456,6 @@
 
     try {
       const params = [
-        "limit=100",
         "includes[]=scanlation_group",
         "order[volume]=desc",
         `order[chapter]=${order}`,
@@ -423,8 +463,11 @@
       const lang = languageParams();
       if (lang) params.push(lang);
 
-      const result = await api(`/manga/${mangaId}/feed`, params.join("&"));
-      state.chapters = result.data;
+      const chapters = await fetchChapterFeed(mangaId, params);
+      state.chapters = chapters.filter((chapter) => {
+        const attr = chapter.attributes || {};
+        return Number(attr.pages || 0) > 0 && !attr.externalUrl;
+      });
       renderChapterList(state.chapters);
 
       document.getElementById("chapterSearch")?.addEventListener("input", (event) => {
@@ -449,7 +492,7 @@
     if (!list) return;
 
     if (!chapters.length) {
-      list.innerHTML = `<div class="empty-state"><p>Chapter tidak ditemukan untuk bahasa yang dipilih. Coba pilih “Semua” atau “ID + EN”.</p></div>`;
+      list.innerHTML = `<div class="empty-state"><p>Chapter tidak ditemukan untuk bahasa yang dipilih. Coba pilih “Semua” atau “Indonesia”.</p></div>`;
       return;
     }
 
@@ -462,9 +505,9 @@
           <button class="chapter-row" data-chapter-id="${chapter.id}">
             <span>
               <strong>${read ? "✅ " : ""}${escapeHTML(chapterLabel(chapter))}</strong>
-              <span>${escapeHTML(chapter.attributes?.translatedLanguage || "-")} • ${escapeHTML(group)} • ${new Date(chapter.attributes?.publishAt || chapter.attributes?.createdAt || Date.now()).toLocaleDateString("id-ID")}</span>
+              <span>${escapeHTML(chapter.attributes?.translatedLanguage || "-")} • ${escapeHTML(chapter.attributes?.pages || "?")} halaman • ${escapeHTML(group)} • ${new Date(chapter.attributes?.publishAt || chapter.attributes?.createdAt || Date.now()).toLocaleDateString("id-ID")}</span>
             </span>
-            <span>Read →</span>
+            <span>Baca →</span>
           </button>`;
       })
       .join("");
@@ -494,9 +537,15 @@
       const pageResult = await api(`/at-home/server/${chapterId}`);
       const baseUrl = pageResult.baseUrl;
       const hash = pageResult.chapter.hash;
-      const files = state.quality === "data" ? pageResult.chapter.data : pageResult.chapter.dataSaver;
-      const folder = state.quality === "data" ? "data" : "data-saver";
-      const pages = files.map((file) => proxiedImage(`${baseUrl}/${folder}/${hash}/${file}`));
+      const highFiles = pageResult.chapter.data || [];
+      const saverFiles = pageResult.chapter.dataSaver || [];
+      const preferSaver = state.quality !== "data";
+      const files = preferSaver ? (saverFiles.length ? saverFiles : highFiles) : (highFiles.length ? highFiles : saverFiles);
+      const folder = preferSaver && saverFiles.length ? "data-saver" : "data";
+      if (!baseUrl || !hash || !files.length) {
+        throw new Error("Chapter ini tidak memiliki file halaman yang bisa dibaca.");
+      }
+      const pages = files.map((file) => `${baseUrl}/${folder}/${hash}/${file}`);
 
       state.currentPages = pages;
       state.pageIndex = 0;
@@ -523,7 +572,7 @@
           <div class="reader-pages ${state.pageMode ? "page-mode" : ""}" id="readerPages"></div>
           <div class="reader-panel">
             <button class="reader-action" data-action="prev-chapter">← Chapter Sebelumnya</button>
-            <button class="reader-action" data-action="next-page">Halaman Berikutnya / Next →</button>
+            <button class="reader-action" data-action="next-page">Halaman Berikutnya →</button>
             <button class="reader-action" data-action="next-chapter">Chapter Berikutnya →</button>
           </div>
         </section>
@@ -533,7 +582,7 @@
       window.scrollTo(0, 0);
     } catch (error) {
       console.error(error);
-      setError("Gagal membuka chapter", "Chapter tidak bisa dimuat. Coba chapter lain, ganti bahasa, atau refresh halaman.");
+      setError("Gagal membuka chapter", "Chapter ini tidak bisa dimuat. Biasanya karena file halaman kosong, chapter sudah dihapus, atau gambar dari MangaDex sedang tidak bisa diakses. Coba chapter lain atau ganti bahasa chapter.");
     }
   }
 
@@ -544,12 +593,12 @@
 
     if (state.pageMode) {
       const src = state.currentPages[state.pageIndex];
-      target.innerHTML = src ? `<img src="${src}" alt="Page ${state.pageIndex + 1}" loading="eager" />` : `<div class="empty-state"><p>Halaman kosong.</p></div>`;
+      target.innerHTML = src ? imageTag(src, `Halaman ${state.pageIndex + 1}`, "eager") : `<div class="empty-state"><p>Halaman kosong.</p></div>`;
       return;
     }
 
     target.innerHTML = state.currentPages
-      .map((src, index) => `<img src="${src}" alt="Page ${index + 1}" loading="lazy" />`)
+      .map((src, index) => imageTag(src, `Halaman ${index + 1}`, index < 2 ? "eager" : "lazy"))
       .join("");
   }
 
@@ -622,7 +671,7 @@
     const favs = store.get("ryuu_favorites", []);
     els.view.innerHTML = `
       <div class="page-title">
-        <span class="pill">Library Lokal</span>
+        <span class="pill">Koleksi Lokal</span>
         <h2>Favorit Kamu</h2>
         <p>Data ini hanya tersimpan di browser/perangkat ini, bukan di server.</p>
       </div>
@@ -638,7 +687,7 @@
     grid.innerHTML = favs
       .map((item) => `
         <article class="manga-card" data-manga-id="${item.id}">
-          <div class="cover-wrap"><img class="cover" src="${item.cover}" alt="${escapeHTML(item.title)}" loading="lazy" /></div>
+          <div class="cover-wrap">${imageTag(item.cover, item.title, "lazy", "cover")}</div>
           <div class="card-body"><h3>${escapeHTML(item.title)}</h3><p class="meta">${escapeHTML(item.status)}</p></div>
         </article>`)
       .join("");
@@ -678,7 +727,7 @@
     setActiveNav("#/about");
     els.view.innerHTML = `
       <div class="page-title">
-        <span class="pill">Important</span>
+        <span class="pill">Penting</span>
         <h2>Catatan Deploy & Legal</h2>
         <p>Project ini dibuat sebagai reader berbasis API publik MangaDex. Jangan pakai MangaPlus sebagai reader langsung di website sendiri.</p>
       </div>
@@ -793,6 +842,19 @@
     if (event.key === "ArrowLeft") prevPage();
   });
 
+  document.addEventListener("error", (event) => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    const fallback = img.dataset.fallbackSrc;
+    if (fallback && img.src !== fallback && !img.dataset.fallbackUsed) {
+      img.dataset.fallbackUsed = "1";
+      img.src = fallback;
+      return;
+    }
+    img.classList.add("is-broken");
+    img.alt = img.alt || "Gambar gagal dimuat";
+  }, true);
+
   els.globalSearchForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const q = els.globalSearchInput.value.trim();
@@ -811,7 +873,12 @@
     els.themeToggle.textContent = current === "light" ? "☀️" : "🌙";
   });
 
-  els.languageSelect.value = localStorage.getItem("ryuu_lang") || "id,en";
+  const lastVersion = localStorage.getItem("ryuu_app_version");
+  if (lastVersion !== APP_VERSION) {
+    localStorage.setItem("ryuu_lang", DEFAULT_LANG);
+  }
+  localStorage.setItem("ryuu_app_version", APP_VERSION);
+  els.languageSelect.value = localStorage.getItem("ryuu_lang") || DEFAULT_LANG;
   const savedTheme = localStorage.getItem("ryuu_theme") || "dark";
   document.documentElement.dataset.theme = savedTheme;
   els.themeToggle.textContent = savedTheme === "light" ? "☀️" : "🌙";

@@ -819,3 +819,14 @@ select:focus {
   transform: translateY(-2px);
   border-color: rgba(139, 92, 246, .72);
 }
+
+img.is-broken {
+  min-height: 180px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, .18), rgba(14, 165, 233, .12));
+  border: 1px dashed rgba(248, 113, 113, .7);
+  object-fit: contain;
+}
+
+.reader-pages img.is-broken::after {
+  content: "Gambar gagal dimuat";
+}
